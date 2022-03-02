@@ -59,7 +59,7 @@ bind: async function(udp-socket: handle socket, local-address: ip-socket-address
 /// - https://man7.org/linux/man-pages/man2/getsockname.2.html
 local-address: function(udp-socket: handle socket) -> expected<ip-socket-address, error>
 
-/// receive a message.
+/// Receive a message.
 /// 
 /// Returns:
 /// - The sender address of the datagram
@@ -73,10 +73,10 @@ local-address: function(udp-socket: handle socket) -> expected<ip-socket-address
 /// - https://man7.org/linux/man-pages/man2/recv.2.html
 receive: async function(udp-socket: handle socket, iovs: push-buffer<u8>) -> expected<receive-result, error>
 
-/// receive a message just like `receive`, but don't remove the message from the queue.
+/// Receive a message just like `receive`, but don't remove the message from the queue.
 peek: async function(udp-socket: handle socket, iovs: push-buffer<u8>) -> expected<receive-result, error>
 
-/// send a message to a specific destination address.
+/// Send a message to a specific destination address.
 /// 
 /// The remote address option is required. To send a message to the "connected" peer,
 /// call `remote-address` to get their address.
