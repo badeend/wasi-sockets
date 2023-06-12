@@ -7,17 +7,64 @@ interface udp {
 	/// A UDP socket handle.
 	type udp-socket = u32
 
+	/// A received UDP datagram.
+	record inbound-datagram {
+		/// The received payload.
+		/// 
+		/// Theoretical max size: ~64 KiB. In practice, typically less than 1500 bytes.
+		data: list<u8>,
 
-	record datagram {
-		data: list<u8>, // Theoretical max size: ~64 KiB. In practice, typically less than 1500 bytes.
-		remote-address: ip-socket-address,
+		/// The source address.
+		/// 
+		/// Equivalent to the `src_addr` out parameter of `recvfrom` and the `msghdr::msg_name` out parameter of `recvmsg`.
+		remote-address: option<ip-socket-address>,
 
-		/// Possible future additions:
-		/// local-address: ip-socket-address, // IP_PKTINFO / IP_RECVDSTADDR / IPV6_PKTINFO
-		/// local-interface: u32, // IP_PKTINFO / IP_RECVIF
-		/// ttl: u8, // IP_RECVTTL
-		/// dscp: u6, // IP_RECVTOS
-		/// ecn: u2, // IP_RECVTOS
+		/// The local address this packet was received on.
+		/// 
+		/// Equivalent to the IP_PKTINFO & IPV6_PKTINFO ancillary messages in conjunction with
+		/// the IP_PKTINFO/IP_RECVDSTADDR & IPV6_RECVPKTINFO socket options.
+		local-address: option<ip-socket-address>,
+
+		/// The value of the Traffic Class field of the received packet. (Also known as "Type of Service (TOS)" in IPv4)
+		/// 
+		/// This value is composed of the DSCP (6 high bits) + ECN (2 low bits)
+		/// 
+		/// Equivalent to the IP_TOS & IPV6_TCLASS ancillary messages in conjunction with
+		/// the IP_RECVTOS & IPV6_RECVTCLASS socket options.
+		traffic-class: option<u8>,
+
+		/// The value of the Hop Limit field of the received packet. (Also known as "Time To Live (TTL)" in IPv4)
+		/// 
+		/// Equivalent to the IP_TTL & IPV6_HOPLIMIT ancillary messages in conjunction with
+		/// the IP_RECVTTL & IPV6_RECVHOPLIMIT socket options.
+		hop-limit: option<u8>,
+	}
+
+	/// A UDP datagram to be sent.
+	record outbound-datagram {
+		/// The payload.
+		/// 
+		/// Theoretical max size: ~64 KiB. In practice, typically less than 1500 bytes.
+		data: list<u8>,
+
+		/// The destination address.
+		/// 
+		/// This field is required on unconnected sockets.
+		/// 
+		/// Equivalent to the `dest_addr` parameter of `sendto` and the `msghdr::msg_name` parameter of `sendmsg`.
+		remote-address: option<ip-socket-address>,
+
+		/// The local address this packet was received on.
+		/// 
+		/// Equivalent to the IP_PKTINFO & IPV6_PKTINFO ancillary messages.
+		local-address: option<ip-socket-address>,
+
+		/// The value of the Traffic Class field of the received packet. (Also known as "Type of Service (TOS)" in IPv4)
+		/// 
+		/// This value is composed of the DSCP (6 high bits) + ECN (2 low bits)
+		/// 
+		/// Equivalent to the IP_TOS & IPV6_TCLASS ancillary messages.
+		traffic-class: option<u8>,
 	}
 
 
@@ -86,9 +133,8 @@ interface udp {
 
 	/// Receive a message.
 	/// 
-	/// Returns:
-	/// - The sender address of the datagram
-	/// - The number of bytes read.
+	/// See `inbound-datagram` for more information per field.
+	/// When an implementation does not support a particular field, that field must be set to `none`.
 	/// 
 	/// # Typical errors
 	/// - `not-bound`:          The socket is not bound to any local address. (EINVAL)
@@ -103,18 +149,21 @@ interface udp {
 	/// - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-recvfrom>
 	/// - <https://learn.microsoft.com/en-us/previous-versions/windows/desktop/legacy/ms741687(v=vs.85)>
 	/// - <https://man.freebsd.org/cgi/man.cgi?query=recv&sektion=2>
-	receive: func(this: udp-socket) -> result<datagram, error-code>
+	receive: func(this: udp-socket) -> result<inbound-datagram, error-code>
 
-	/// Send a message to a specific destination address.
+	/// Send a message.
 	/// 
-	/// The remote address option is required. To send a message to the "connected" peer,
-	/// call `remote-address` to get their address.
+	/// See `outbound-datagram` for more information per field.
+	/// Unless otherwise specified, every `option` field in the datagram may be set to `none`. In which case it is left up to the implementation to pick a suitable value.
 	/// 
 	/// # Typical errors
-	/// - `address-family-mismatch`: The `remote-address` has the wrong address family. (EAFNOSUPPORT)
+	/// - `address-family-mismatch`: The `remote-address` or `local-address` has the wrong address family. (EAFNOSUPPORT)
 	/// - `invalid-remote-address`:  The IP address in `remote-address` is set to INADDR_ANY (`0.0.0.0` / `::`). (EDESTADDRREQ, EADDRNOTAVAIL)
 	/// - `invalid-remote-address`:  The port in `remote-address` is set to 0. (EDESTADDRREQ, EADDRNOTAVAIL)
-	/// - `already-connected`:       The socket is in "connected" mode and the `datagram.remote-address` does not match the address passed to `connect`. (EISCONN)
+	/// - `already-connected`:       The socket is in "connected" mode and `remote-address` is `some` value that does not match the address passed to `connect`. (EISCONN)
+	/// - `not-connected`:           The socket is not "connected" and no value for `remote-address` was provided.
+	/// - `???`:                     The socket is bound to a specific address and `local-address` is `some` value that does not match the currently bound address.
+	/// - `???`:                     The socket is bound to a wildcard address and `local-address` is `some` value that is not covered under the wildcard binding.
 	/// - `not-bound`:               The socket is not bound to any local address. Unlike POSIX, this function does not perform an implicit bind.
 	/// - `remote-unreachable`:      The remote address is not reachable. (ECONNREFUSED, ECONNRESET, ENETRESET on Windows, EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN)
 	/// - `datagram-too-large`:      The datagram is too large. (EMSGSIZE)
@@ -128,7 +177,7 @@ interface udp {
 	/// - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-sendto>
 	/// - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsasendmsg>
 	/// - <https://man.freebsd.org/cgi/man.cgi?query=send&sektion=2>
-	send: func(this: udp-socket, datagram: datagram) -> result<_, error-code>
+	send: func(this: udp-socket, datagram: outbound-datagram) -> result<_, error-code>
 
 	/// Get the current bound address.
 	/// 

@@ -322,11 +322,66 @@ mean &quot;ready&quot;.</p>
 #### <a name="udp_socket">`type udp-socket`</a>
 `u32`
 <p>A UDP socket handle.
-<h4><a name="datagram"><code>record datagram</code></a></h4>
+<h4><a name="outbound_datagram"><code>record outbound-datagram</code></a></h4>
+<p>A UDP datagram to be sent.</p>
 <h5>Record Fields</h5>
 <ul>
-<li><a name="datagram.data"><code>data</code></a>: list&lt;<code>u8</code>&gt;</li>
-<li><a name="datagram.remote_address"><a href="#remote_address"><code>remote-address</code></a></a>: <a href="#ip_socket_address"><a href="#ip_socket_address"><code>ip-socket-address</code></a></a></li>
+<li>
+<p><a name="outbound_datagram.data"><code>data</code></a>: list&lt;<code>u8</code>&gt;</p>
+<p>The payload.
+<p>Theoretical max size: ~64 KiB. In practice, typically less than 1500 bytes.</p>
+</li>
+<li>
+<p><a name="outbound_datagram.remote_address"><a href="#remote_address"><code>remote-address</code></a></a>: option&lt;<a href="#ip_socket_address"><a href="#ip_socket_address"><code>ip-socket-address</code></a></a>&gt;</p>
+<p>The destination address.
+<p>This field is required on unconnected sockets.</p>
+<p>Equivalent to the <code>dest_addr</code> parameter of <code>sendto</code> and the <code>msghdr::msg_name</code> parameter of <code>sendmsg</code>.</p>
+</li>
+<li>
+<p><a name="outbound_datagram.local_address"><a href="#local_address"><code>local-address</code></a></a>: option&lt;<a href="#ip_socket_address"><a href="#ip_socket_address"><code>ip-socket-address</code></a></a>&gt;</p>
+<p>The local address this packet was received on.
+<p>Equivalent to the IP_PKTINFO &amp; IPV6_PKTINFO ancillary messages.</p>
+</li>
+<li>
+<p><a name="outbound_datagram.traffic_class"><code>traffic-class</code></a>: option&lt;<code>u8</code>&gt;</p>
+<p>The value of the Traffic Class field of the received packet. (Also known as "Type of Service (TOS)" in IPv4)
+<p>This value is composed of the DSCP (6 high bits) + ECN (2 low bits)</p>
+<p>Equivalent to the IP_TOS &amp; IPV6_TCLASS ancillary messages.</p>
+</li>
+</ul>
+<h4><a name="inbound_datagram"><code>record inbound-datagram</code></a></h4>
+<p>A received UDP datagram.</p>
+<h5>Record Fields</h5>
+<ul>
+<li>
+<p><a name="inbound_datagram.data"><code>data</code></a>: list&lt;<code>u8</code>&gt;</p>
+<p>The received payload.
+<p>Theoretical max size: ~64 KiB. In practice, typically less than 1500 bytes.</p>
+</li>
+<li>
+<p><a name="inbound_datagram.remote_address"><a href="#remote_address"><code>remote-address</code></a></a>: option&lt;<a href="#ip_socket_address"><a href="#ip_socket_address"><code>ip-socket-address</code></a></a>&gt;</p>
+<p>The source address.
+<p>Equivalent to the <code>src_addr</code> out parameter of <code>recvfrom</code> and the <code>msghdr::msg_name</code> out parameter of <code>recvmsg</code>.</p>
+</li>
+<li>
+<p><a name="inbound_datagram.local_address"><a href="#local_address"><code>local-address</code></a></a>: option&lt;<a href="#ip_socket_address"><a href="#ip_socket_address"><code>ip-socket-address</code></a></a>&gt;</p>
+<p>The local address this packet was received on.
+<p>Equivalent to the IP_PKTINFO &amp; IPV6_PKTINFO ancillary messages in conjunction with
+the IP_PKTINFO/IP_RECVDSTADDR &amp; IPV6_RECVPKTINFO socket options.</p>
+</li>
+<li>
+<p><a name="inbound_datagram.traffic_class"><code>traffic-class</code></a>: option&lt;<code>u8</code>&gt;</p>
+<p>The value of the Traffic Class field of the received packet. (Also known as "Type of Service (TOS)" in IPv4)
+<p>This value is composed of the DSCP (6 high bits) + ECN (2 low bits)</p>
+<p>Equivalent to the IP_TOS &amp; IPV6_TCLASS ancillary messages in conjunction with
+the IP_RECVTOS &amp; IPV6_RECVTCLASS socket options.</p>
+</li>
+<li>
+<p><a name="inbound_datagram.hop_limit"><code>hop-limit</code></a>: option&lt;<code>u8</code>&gt;</p>
+<p>The value of the Hop Limit field of the received packet. (Also known as "Time To Live (TTL)" in IPv4)
+<p>Equivalent to the IP_TTL &amp; IPV6_HOPLIMIT ancillary messages in conjunction with
+the IP_RECVTTL &amp; IPV6_RECVHOPLIMIT socket options.</p>
+</li>
 </ul>
 <hr />
 <h3>Functions</h3>
@@ -429,11 +484,8 @@ If the TCP/UDP port is zero, the socket will be bound to a random free port.</p>
 </ul>
 <h4><a name="receive"><code>receive: func</code></a></h4>
 <p>Receive a message.</p>
-<p>Returns:</p>
-<ul>
-<li>The sender address of the datagram</li>
-<li>The number of bytes read.</li>
-</ul>
+<p>See <a href="#inbound_datagram"><code>inbound-datagram</code></a> for more information per field.
+When an implementation does not support a particular field, that field must be set to <code>none</code>.</p>
 <h1>Typical errors</h1>
 <ul>
 <li><code>not-bound</code>:          The socket is not bound to any local address. (EINVAL)</li>
@@ -456,18 +508,21 @@ If the TCP/UDP port is zero, the socket will be bound to a random free port.</p>
 </ul>
 <h5>Return values</h5>
 <ul>
-<li><a name="receive.0"></a> result&lt;<a href="#datagram"><a href="#datagram"><code>datagram</code></a></a>, <a href="#error_code"><a href="#error_code"><code>error-code</code></a></a>&gt;</li>
+<li><a name="receive.0"></a> result&lt;<a href="#inbound_datagram"><a href="#inbound_datagram"><code>inbound-datagram</code></a></a>, <a href="#error_code"><a href="#error_code"><code>error-code</code></a></a>&gt;</li>
 </ul>
 <h4><a name="send"><code>send: func</code></a></h4>
-<p>Send a message to a specific destination address.</p>
-<p>The remote address option is required. To send a message to the &quot;connected&quot; peer,
-call <a href="#remote_address"><code>remote-address</code></a> to get their address.</p>
+<p>Send a message.</p>
+<p>See <a href="#outbound_datagram"><code>outbound-datagram</code></a> for more information per field.
+Unless otherwise specified, every <code>option</code> field in the datagram may be set to <code>none</code>. In which case it is left up to the implementation to pick a suitable value.</p>
 <h1>Typical errors</h1>
 <ul>
-<li><code>address-family-mismatch</code>: The <a href="#remote_address"><code>remote-address</code></a> has the wrong address family. (EAFNOSUPPORT)</li>
+<li><code>address-family-mismatch</code>: The <a href="#remote_address"><code>remote-address</code></a> or <a href="#local_address"><code>local-address</code></a> has the wrong address family. (EAFNOSUPPORT)</li>
 <li><code>invalid-remote-address</code>:  The IP address in <a href="#remote_address"><code>remote-address</code></a> is set to INADDR_ANY (<code>0.0.0.0</code> / <code>::</code>). (EDESTADDRREQ, EADDRNOTAVAIL)</li>
 <li><code>invalid-remote-address</code>:  The port in <a href="#remote_address"><code>remote-address</code></a> is set to 0. (EDESTADDRREQ, EADDRNOTAVAIL)</li>
-<li><code>already-connected</code>:       The socket is in &quot;connected&quot; mode and the <code>datagram.remote-address</code> does not match the address passed to <code>connect</code>. (EISCONN)</li>
+<li><code>already-connected</code>:       The socket is in &quot;connected&quot; mode and <a href="#remote_address"><code>remote-address</code></a> is <code>some</code> value that does not match the address passed to <code>connect</code>. (EISCONN)</li>
+<li><code>not-connected</code>:           The socket is not &quot;connected&quot; and no value for <a href="#remote_address"><code>remote-address</code></a> was provided.</li>
+<li><code>???</code>:                     The socket is bound to a specific address and <a href="#local_address"><code>local-address</code></a> is <code>some</code> value that does not match the currently bound address.</li>
+<li><code>???</code>:                     The socket is bound to a wildcard address and <a href="#local_address"><code>local-address</code></a> is <code>some</code> value that is not covered under the wildcard binding.</li>
 <li><code>not-bound</code>:               The socket is not bound to any local address. Unlike POSIX, this function does not perform an implicit bind.</li>
 <li><code>remote-unreachable</code>:      The remote address is not reachable. (ECONNREFUSED, ECONNRESET, ENETRESET on Windows, EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN)</li>
 <li><code>datagram-too-large</code>:      The datagram is too large. (EMSGSIZE)</li>
@@ -486,7 +541,7 @@ call <a href="#remote_address"><code>remote-address</code></a> to get their addr
 <h5>Params</h5>
 <ul>
 <li><a name="send.this"><code>this</code></a>: <a href="#udp_socket"><a href="#udp_socket"><code>udp-socket</code></a></a></li>
-<li><a name="send.datagram"><a href="#datagram"><code>datagram</code></a></a>: <a href="#datagram"><a href="#datagram"><code>datagram</code></a></a></li>
+<li><a name="send.datagram"><code>datagram</code></a>: <a href="#outbound_datagram"><a href="#outbound_datagram"><code>outbound-datagram</code></a></a></li>
 </ul>
 <h5>Return values</h5>
 <ul>
