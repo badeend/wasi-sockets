@@ -58,14 +58,18 @@ The following diagram describes the exhaustive set of all possible state transit
 stateDiagram-v2
     state "unbound" as Unbound
     state "bind-in-progress" as BindInProgress
+    state "bind-complete" as BindComplete
     state "bound" as Bound
     state "listen-in-progress" as ListenInProgress
+    state "listen-complete" as ListenComplete
     state "listening" as Listening
     state "connect-in-progress" as ConnectInProgress
+    state "connect-complete" as ConnectComplete
     state "connected" as Connected
     state "closed" as Closed
 
     [*] --> Unbound: create-tcp-socket()\n#ok
+    [*] --> Listening: accept()
 
     Unbound --> BindInProgress: start-bind()\n#ok
     Unbound --> Unbound: start-bind()\n#error
@@ -73,15 +77,17 @@ stateDiagram-v2
     Unbound --> Closed: start-connect()\n#error
 
     ConnectInProgress --> ConnectInProgress: finish-connect()\n#error(would-block)
-    ConnectInProgress --> Closed: finish-connect()\n#error(NOT would-block)
-    ConnectInProgress --> Connected: finish-connect()\n#ok
+    ConnectInProgress --> ConnectComplete: «ready for finish-connect»
+    ConnectComplete --> Closed: finish-connect()\n#error(NOT would-block)
+    ConnectComplete --> Connected: finish-connect()\n#ok
 
     Connected --> Connected: shutdown()
     Connected --> Closed: «connection terminated»
     
     BindInProgress --> BindInProgress: finish-bind()\n#error(would-block)
-    BindInProgress --> Unbound: finish-bind()\n#error(NOT would-block)
-    BindInProgress --> Bound: finish-bind()\n#ok
+    BindInProgress --> BindComplete: «ready for finish-bind»
+    BindComplete --> Unbound: finish-bind()\n#error(NOT would-block)
+    BindComplete --> Bound: finish-bind()\n#ok
 
     Bound --> ListenInProgress: start-listen()\n#ok
     Bound --> Closed: start-listen()\n#error
@@ -89,10 +95,9 @@ stateDiagram-v2
     Bound --> Closed: start-connect()\n#error
 
     ListenInProgress --> ListenInProgress: finish-listen()\n#error(would-block)
-    ListenInProgress --> Closed: finish-listen()\n#error(NOT would-block)
-    ListenInProgress --> Listening: finish-listen()\n#ok
-
-    Listening --> Listening: accept()
+    ListenInProgress --> ListenComplete: «ready for finish-listen»
+    ListenComplete --> Closed: finish-listen()\n#error(NOT would-block)
+    ListenComplete --> Listening: finish-listen()\n#ok
 ```
 
 Most transitions are dependent on the result of the method. Legend:
@@ -103,9 +108,17 @@ Most transitions are dependent on the result of the method. Legend:
 - _(no annotation)_: Transition in unconditional.
 
 #### Not shown in the diagram:
-- All state transitions shown above are driven by the caller and occur synchronously during the method invocations. There's one exception: the `«connection terminated»` transition from `connected` to `closed`. This can happen when: the peer closed the connection, a network failure occurred, the connection timed out, etc.
+- Most state transitions shown above are driven by the caller and occur synchronously during the method invocations. There's four exceptions: transitions into `ConnectComplete`, `BindComplete` and `ListenComplete`, and `«connection terminated»` transition from `connected` to `closed`. This can happen when: the peer closed the connection, a network failure occurred, the connection timed out, etc.
+- 
 - While `shutdown` immediately closes the input and/or output streams associated with the socket, it does not affect the socket's own state as it just _initiates_ a shutdown. Only after the full shutdown sequence has been completed will the `«connection terminated»` transition be activated. (See previous item)
 - Calling a method from the wrong state returns `error(invalid-state)` and does not affect the state of the socket. A special case are the `finish-*` methods; those return `error(not-in-progress)` when the socket is not in the corresponding `*-in-progress` state.
 - This diagram only includes the methods that impact the socket's state. For an overview of all methods and their required states, see [tcp.wit](./wit/tcp.wit)
 - Client sockets returned by `accept()` are in immediately in the `connected` state.
 - A socket resource can be dropped in any state.
+
+### Pollable States
+
+The state of the pollable on the socket is `«resolved»` in all states, except in the following two cases:
+
+* The pollable is `«unresolved»` in the `bind-in-progress`, `connect-in-progress` and `listen-in-progress` states.
+* The pollable state is set to the state of the underlying socket in the `listening` state, specifically `«unresolved»` when there is no socket accept backlog, and `«resolved»` otherwise or in the closed socket state.
