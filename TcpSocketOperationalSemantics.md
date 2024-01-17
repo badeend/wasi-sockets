@@ -69,7 +69,7 @@ stateDiagram-v2
     state "closed" as Closed
 
     [*] --> Unbound: create-tcp-socket()\n#ok
-    [*] --> Listening: accept()
+    [*] --> Connected: listen accept
 
     Unbound --> BindInProgress: start-bind()\n#ok
     Unbound --> Unbound: start-bind()\n#error
@@ -98,6 +98,8 @@ stateDiagram-v2
     ListenInProgress --> ListenComplete: «ready for finish-listen»
     ListenComplete --> Closed: finish-listen()\n#error(NOT would-block)
     ListenComplete --> Listening: finish-listen()\n#ok
+
+    Listening --> Listening: accept()
 ```
 
 Most transitions are dependent on the result of the method. Legend:
