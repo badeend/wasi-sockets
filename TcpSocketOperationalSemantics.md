@@ -69,7 +69,6 @@ stateDiagram-v2
     state "closed" as Closed
 
     [*] --> Unbound: create-tcp-socket()\n#ok
-    [*] --> Connected: listen accept
 
     Unbound --> BindInProgress: start-bind()\n#ok
     Unbound --> Unbound: start-bind()\n#error
