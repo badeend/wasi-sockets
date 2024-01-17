@@ -112,7 +112,7 @@ Most transitions are dependent on the result of the method. Legend:
 - Most state transitions shown above are driven by the caller and occur synchronously during the method invocations. There's four exceptions: transitions into `ConnectComplete`, `BindComplete` and `ListenComplete`, and `«connection terminated»` transition from `connected` to `closed`. This can happen when: the peer closed the connection, a network failure occurred, the connection timed out, etc.
 - 
 - While `shutdown` immediately closes the input and/or output streams associated with the socket, it does not affect the socket's own state as it just _initiates_ a shutdown. Only after the full shutdown sequence has been completed will the `«connection terminated»` transition be activated. (See previous item)
-- Calling a method from the wrong state returns `error(invalid-state)` and does not affect the state of the socket. A special case are the `finish-*` methods; those return `error(not-in-progress)` when the socket is not in the corresponding `*-in-progress` state.
+- Calling a method from the wrong state returns `error(invalid-state)` and does not affect the state of the socket. A special case are the `finish-*` methods; those return `error(not-in-progress)` when the socket is not in the corresponding `*-in-progress` or `*-complete` state.
 - This diagram only includes the methods that impact the socket's state. For an overview of all methods and their required states, see [tcp.wit](./wit/tcp.wit)
 - Client sockets returned by `accept()` are in immediately in the `connected` state.
 - A socket resource can be dropped in any state.
